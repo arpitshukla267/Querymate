@@ -279,7 +279,7 @@ function IntegrationPage() {
                 Step 4: Test Your Widget
               </h2>
               <p className="text-gray-600 mb-4">
-                After adding the code, refresh your website. You should see a chat button in the bottom-right corner. Click it to test the chatbot!
+                Add it in your layout.js file before the closing body tag. Click it to test the chatbot!
               </p>
             </div>
           </div>

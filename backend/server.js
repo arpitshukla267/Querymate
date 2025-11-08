@@ -287,7 +287,7 @@ app.post("/api/chat/public", authenticateApiKey, async (req, res) => {
       return res.status(401).json({ error: "Invalid API key" });
     }
 
-    const prompt = `You are QueryMate, a helpful assistant. Use ONLY the following context to answer. If the answer isn't in the context, say "I am here to discuss the information you've provided. Could you tell me more about what you're looking for?"\n\nContext:\n${contextToUse}\n\nUser question:\n${message}`;
+    const prompt = `You are QueryMate, a helpful assistant. Use ONLY the following context to answer. If the answer isn't in the context, say "Hmm, that doesn’t seem related to what I can help with. Want to try a different question?"\n\nContext:\n${contextToUse}\n\nUser question:\n${message}`;
 
     // Try models in order: gemini-2.0-flash-exp, gemini-1.5-flash, gemini-pro
     const modelsToTry = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-pro"];
