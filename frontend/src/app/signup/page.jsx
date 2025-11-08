@@ -1,13 +1,14 @@
 "use client";
 import React, { useState } from "react";
-import { LogIn } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import Image from "next/image";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 
-function LoginPage() {
+function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -17,10 +18,21 @@ function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { data } = await axios.post(`${url}/api/login`, { email, password });
+      const { data } = await axios.post(`${url}/api/register`, { email, password });
       
       if (data.token) {
         localStorage.setItem("authToken", data.token);
@@ -28,7 +40,7 @@ function LoginPage() {
         router.push("/");
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Login failed. Please try again.");
+      setError(err.response?.data?.error || "Signup failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -47,14 +59,13 @@ function LoginPage() {
         />
       </div>
 
-
-      {/* Right side - Login form */}
+      {/* Right side - Signup form */}
       <div className="flex w-full md:w-1/2 items-center justify-center bg-white">
         <div className="w-full max-w-md p-8">
           <div className="text-center mb-6">
-            <LogIn className="w-12 h-12 text-indigo-600 mx-auto" />
-            <h1 className="text-3xl font-bold text-gray-800">Login to QueryMate</h1>
-            <p className="text-gray-500 text-sm">Welcome back! Please login to continue.</p>
+            <UserPlus className="w-12 h-12 text-indigo-600 mx-auto" />
+            <h1 className="text-3xl font-bold text-gray-800">Sign up for QueryMate</h1>
+            <p className="text-gray-500 text-sm">Create your account to get started.</p>
           </div>
 
           {error && (
@@ -87,6 +98,21 @@ function LoginPage() {
                 className="w-full px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 required
                 disabled={loading}
+                minLength={6}
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-700 font-medium mb-1">Confirm Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                required
+                disabled={loading}
+                minLength={6}
               />
             </div>
 
@@ -95,14 +121,14 @@ function LoginPage() {
               disabled={loading}
               className="w-full bg-indigo-600 text-white py-2 rounded-md font-semibold hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Logging in..." : "Login"}
+              {loading ? "Creating account..." : "Sign up"}
             </button>
           </form>
 
           <p className="text-sm text-gray-600 mt-4 text-center">
-            Don’t have an account?{" "}
-            <a href="/signup" className="text-indigo-600 hover:underline font-medium">
-              Sign up
+            Already have an account?{" "}
+            <a href="/login" className="text-indigo-600 hover:underline font-medium">
+              Login
             </a>
           </p>
         </div>
@@ -111,4 +137,5 @@ function LoginPage() {
   );
 }
 
-export default LoginPage;
+export default SignupPage;
+

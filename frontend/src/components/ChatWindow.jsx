@@ -13,8 +13,16 @@ function ChatWindow() {
 
   const textareaRef = useRef(null);
 
-  // Backend URL
-  const url = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  // Backend URL - use deployed URL in production
+  const url = process.env.NEXT_PUBLIC_BACKEND_URL || "https://querymate-backend-sz0d.onrender.com";
+
+  // Get auth token from localStorage
+  const getAuthToken = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("authToken");
+    }
+    return null;
+  };
 
   // Send message to backend
   const sendMessage = async () => {
@@ -22,15 +30,25 @@ function ChatWindow() {
 
     // Add user message
     setMessages((prev) => [...prev, { role: "user", text: input }]);
+    const userMessage = input;
     setInput("");
     setInputHeight("auto"); // Reset height after sending
     setLoading(true);
 
     try {
+      const token = getAuthToken();
+      const headers = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const { data } = await axios.post(
         `${url}/api/chat`,
-        { message: input },
-        { withCredentials: true }
+        { message: userMessage },
+        { 
+          headers,
+          withCredentials: true 
+        }
       );
 
       if (data.reply) {
@@ -72,7 +90,7 @@ function ChatWindow() {
   }, [input]);
 
   return (
-    <div className="w-full max-w-3xl bg-gray-200 shadow-md rounded-lg flex flex-col h-[70vh]">
+    <div className="w-full h-full bg-gray-200 shadow-md rounded-lg flex flex-col">
       {/* Messages Area */}
       <div className="flex-1 p-4 overflow-y-auto">
         {messages.map((msg, i) => (
