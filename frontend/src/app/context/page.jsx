@@ -1,26 +1,57 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Save, FileText, Key, Copy, Check, Code } from "lucide-react";
+import { Save, FileText, Key, Copy, Check, Code, Send, MessageCircle } from "lucide-react";
 
 function ContextPage() {
-  const [contextData, setContextData] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sessionStage, setSessionStage] = useState("collecting");
+  const [finalContext, setFinalContext] = useState("");
+  const [showFinalContext, setShowFinalContext] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [apiKey, setApiKey] = useState("");
   const [generatingKey, setGeneratingKey] = useState(false);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const messagesEndRef = useRef(null);
 
   const url = process.env.NEXT_PUBLIC_BACKEND_URL || "https://querymate-backend-sz0d.onrender.com";
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(() => {
-    loadContext();
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    loadSession();
+    loadApiKey();
   }, []);
 
-  const loadContext = async () => {
+  const loadApiKey = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+
+      const { data } = await axios.get(`${url}/api/user/context`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000
+      });
+
+      setApiKey(data.apiKey || "");
+    } catch (err) {
+      console.error("Load API key error:", err);
+    }
+  };
+
+  const loadSession = async () => {
     setLoading(true);
     setMessage("");
     try {
@@ -31,16 +62,68 @@ function ContextPage() {
         return;
       }
 
-      const { data } = await axios.get(`${url}/api/user/context`, {
+      const { data } = await axios.get(`${url}/api/context-session`, {
         headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000 // Reduced timeout to 10 seconds
+        timeout: 30000
       });
 
-      setContextData(data.contextData || "");
-      setApiKey(data.apiKey || "");
+      setSessionStage(data.session.stage);
+
+      // If user already has context data, show it in read-only mode
+      if (data.session.hasExistingContext) {
+        const contextData = await axios.get(`${url}/api/user/context`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 10000
+        });
+        setFinalContext(contextData.data.contextData || "");
+        setShowFinalContext(true);
+        setMessages([
+          {
+            type: "ai",
+            content: "You already have context data set up. You can view and edit it below, or start a new conversation to update it."
+          }
+        ]);
+      } else if (data.session.stage === "complete") {
+        // Session is complete, show final context
+        const formatContext = (data) => {
+          let formatted = "";
+          if (data.business_name) formatted += `Business Name: ${data.business_name}\n\n`;
+          if (data.description) formatted += `Description:\n${data.description}\n\n`;
+          if (data.target_audience) formatted += `Target Audience: ${data.target_audience}\n\n`;
+          if (data.features) formatted += `Features:\n${data.features}\n\n`;
+          if (data.pricing) formatted += `Pricing: ${data.pricing}\n\n`;
+          if (data.support) formatted += `Support: ${data.support}\n\n`;
+          if (data.contact) formatted += `Contact: ${data.contact}\n\n`;
+          Object.keys(data).forEach(key => {
+            if (!["business_name", "description", "target_audience", "features", "pricing", "support", "contact"].includes(key) && data[key]) {
+              formatted += `${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}: ${data[key]}\n\n`;
+            }
+          });
+          return formatted.trim() || JSON.stringify(data, null, 2);
+        };
+        const contextSummary = formatContext(data.session.collectedData);
+        setFinalContext(contextSummary);
+        setShowFinalContext(true);
+        setMessages([
+          {
+            type: "ai",
+            content: "✅ Context setup complete! Here's the information I gathered about your business."
+          }
+        ]);
+      } else {
+        // Show initial message if available
+        if (data.initialMessage) {
+          setMessages([
+            {
+              type: "ai",
+              content: data.initialMessage
+            }
+          ]);
+        }
+      }
     } catch (err) {
-      console.error("Load context error:", err);
-      let errorMsg = "Failed to load context data. ";
+      console.error("Load session error:", err);
+      let errorMsg = "Failed to load session. ";
       
       if (err.response?.status === 401) {
         errorMsg += "Please login again.";
@@ -55,20 +138,81 @@ function ContextPage() {
       }
       
       setMessage(`⚠️ ${errorMsg}`);
-      // Still show the page even if loading fails - allow user to work with empty data
-      setContextData("");
-      setApiKey("");
     } finally {
-      // Always stop loading, even on error, so page can render
       setLoading(false);
     }
   };
 
-  const handleRetry = () => {
-    loadContext();
+  const sendMessage = async () => {
+    if (!inputMessage.trim() || sending) return;
+
+    const userMessage = inputMessage.trim();
+    setInputMessage("");
+    setSending(true);
+    setMessage("");
+
+    // Add user message to chat
+    setMessages(prev => [...prev, { type: "user", content: userMessage }]);
+
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        setMessage("Please login to send messages.");
+        setSending(false);
+        return;
+      }
+
+      const { data } = await axios.post(
+        `${url}/api/context-session/message`,
+        { message: userMessage },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 30000
+        }
+      );
+
+      // Add AI response to chat
+      setMessages(prev => [...prev, { type: "ai", content: data.reply }]);
+
+      // If done, show final context
+      if (data.done) {
+        setSessionStage("complete");
+        // Format collected data into readable text
+        const formatContext = (data) => {
+          let formatted = "";
+          if (data.business_name) formatted += `Business Name: ${data.business_name}\n\n`;
+          if (data.description) formatted += `Description:\n${data.description}\n\n`;
+          if (data.target_audience) formatted += `Target Audience: ${data.target_audience}\n\n`;
+          if (data.features) formatted += `Features:\n${data.features}\n\n`;
+          if (data.pricing) formatted += `Pricing: ${data.pricing}\n\n`;
+          if (data.support) formatted += `Support: ${data.support}\n\n`;
+          if (data.contact) formatted += `Contact: ${data.contact}\n\n`;
+          Object.keys(data).forEach(key => {
+            if (!["business_name", "description", "target_audience", "features", "pricing", "support", "contact"].includes(key) && data[key]) {
+              formatted += `${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}: ${data[key]}\n\n`;
+            }
+          });
+          return formatted.trim() || JSON.stringify(data, null, 2);
+        };
+        const contextSummary = formatContext(data.collectedData);
+        setFinalContext(contextSummary);
+        setShowFinalContext(true);
+        setMessage("✅ Context setup complete! You can now review and edit the summary below.");
+      }
+    } catch (err) {
+      console.error("Send message error:", err);
+      const errorMsg = err.response?.data?.error || err.message || "Failed to send message. Please try again.";
+      setMessage(`❌ ${errorMsg}`);
+      setMessages(prev => [...prev, { 
+        type: "ai", 
+        content: "Sorry, I encountered an error. Please try again." 
+      }]);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const saveContext = async () => {
+  const saveFinalContext = async () => {
     setSaving(true);
     setMessage("");
 
@@ -81,8 +225,8 @@ function ContextPage() {
       }
 
       await axios.post(
-        `${url}/api/user/context`,
-        { contextData },
+        `${url}/api/context-session/complete`,
+        { finalContext },
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -149,7 +293,7 @@ function ContextPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading context data...</p>
+          <p className="text-gray-500">Loading context session...</p>
         </div>
       </div>
     );
@@ -164,9 +308,9 @@ function ContextPage() {
         </div>
 
         <p className="text-gray-600 mb-6">
-          Enter information about your business, products, or services. This data will be used by
-          QueryMate to provide personalized answers to your users. Replace the default KnectHotel
-          data with your own information.
+          {sessionStage === "collecting" 
+            ? "I'll ask you some questions about your business or service to gather context information. Let's get started!"
+            : "Your context data has been collected. Review and edit it below, then save to use it with your chatbot."}
         </p>
 
         {message && (
@@ -179,40 +323,98 @@ function ContextPage() {
                 : "bg-blue-100 text-blue-700"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span>{message}</span>
-              {(message.startsWith("❌") || message.startsWith("⚠️")) && (
-                <button
-                  onClick={handleRetry}
-                  className="ml-2 px-3 py-1 bg-white text-red-700 rounded text-xs font-semibold hover:bg-red-50 transition"
-                >
-                  Retry
-                </button>
-              )}
+            <span>{message}</span>
+          </div>
+        )}
+
+        {/* Chat Interface */}
+        {sessionStage === "collecting" && !showFinalContext && (
+          <div className="mb-6">
+            <div className="border rounded-lg h-96 bg-gray-50 flex flex-col">
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex ${msg.type === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg p-3 ${
+                        msg.type === "user"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-white text-gray-800 border border-gray-200"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        {msg.type === "ai" && (
+                          <MessageCircle className="w-4 h-4 mt-1 flex-shrink-0" />
+                        )}
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {sending && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                        <span className="text-sm text-gray-600">Thinking...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="border-t p-4 bg-white rounded-b-lg">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                    placeholder="Type your answer here..."
+                    className="flex-1 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    disabled={sending}
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={sending || !inputMessage.trim()}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Send
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="mb-4">
-          <label className="block text-gray-700 font-medium mb-2">
-            Context Data (Information for your chatbot)
-          </label>
-          <textarea
-            value={contextData}
-            onChange={(e) => setContextData(e.target.value)}
-            placeholder="Enter your business information, product details, FAQs, or any data you want the chatbot to use when answering questions..."
-            className="w-full h-96 px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-          />
-        </div>
-
-        <button
-          onClick={saveContext}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Save className="w-5 h-5" />
-          {saving ? "Saving..." : "Save Context Data"}
-        </button>
+        {/* Final Context Summary */}
+        {showFinalContext && (
+          <div className="mb-6">
+            <label className="block text-gray-700 font-medium mb-2">
+              Context Summary (Review and edit if needed)
+            </label>
+            <textarea
+              value={finalContext}
+              onChange={(e) => setFinalContext(e.target.value)}
+              placeholder="Context summary will appear here..."
+              className="w-full h-96 px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none font-mono text-sm"
+            />
+            <button
+              onClick={saveFinalContext}
+              disabled={saving}
+              className="mt-4 flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-5 h-5" />
+              {saving ? "Saving..." : "Save Context Data"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* API Key Management Section */}
@@ -341,4 +543,3 @@ function ContextPage() {
 }
 
 export default ContextPage;
-
