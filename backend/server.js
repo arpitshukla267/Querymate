@@ -22,7 +22,7 @@ const allowedOrigins = [
 // CORS for regular endpoints
 app.use((req, res, next) => {
   // Allow all origins for public chat endpoint (widget embedding)
-  if (req.path === "/api/chat/public" || req.path === "/widget.js") {
+  if (req.path === "/api/chat/public" || req.path === "/api/widget-settings" || req.path === "/widget.js") {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, X-API-Key");
@@ -60,8 +60,20 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   contextData: { type: String, default: "" }, // User-specific context for chatbot
   apiKey: { type: String, unique: true, sparse: true }, // API key for widget embedding
+  widgetSettings: {
+    widgetColor: { type: String, default: "#667eea" }, // Widget button color
+    logoColor: { type: String, default: "#ffffff" }, // Logo/icon color
+    chatWindowColor: { type: String, default: "#ffffff" }, // Chat window background
+    headerColor: { type: String, default: "#667eea" }, // Header background color
+    headerText: { type: String, default: "QueryMate" }, // Header text (editable)
+    poweredByText: { type: String, default: "Powered by QueryMate" } // Powered by text (not editable)
+  },
   createdAt: { type: Date, default: Date.now }
 });
+
+// Add indexes for faster queries
+userSchema.index({ email: 1 });
+userSchema.index({ apiKey: 1 });
 
 const User = mongoose.model("User", userSchema);
 
@@ -72,6 +84,9 @@ const contextSessionSchema = new mongoose.Schema({
   stage: { type: String, enum: ["collecting", "complete"], default: "collecting" },
   lastUpdated: { type: Date, default: Date.now }
 });
+
+// Add index for faster queries
+contextSessionSchema.index({ email: 1 });
 
 const ContextSession = mongoose.model("ContextSession", contextSessionSchema);
 
@@ -89,10 +104,30 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = await User.findById(decoded.userId).select("-password");
+    // Only select needed fields for better performance (excluding password)
+    req.user = await User.findById(decoded.userId).select("email contextData apiKey");
     next();
   } catch (err) {
     next(); // Continue without user if token invalid
+  }
+};
+
+// Middleware to authenticate by API key
+const authenticateApiKey = async (req, res, next) => {
+  const userApiKey = req.headers["x-api-key"] || req.body.apiKey;
+  
+  if (!userApiKey) {
+    return next(); // Continue without user if no API key
+  }
+
+  try {
+    const user = await User.findOne({ apiKey: userApiKey }).select("-password");
+    if (user) {
+      req.user = user;
+    }
+    next();
+  } catch (err) {
+    next(); // Continue without user if error
   }
 };
 
@@ -222,6 +257,134 @@ app.get("/api/user/api-key", authenticateToken, async (req, res) => {
   }
 });
 
+// Get widget settings (public endpoint for widget)
+app.get("/api/widget-settings", authenticateApiKey, async (req, res) => {
+  try {
+    if (!req.user) {
+      // Return default settings if no user found
+      return res.json({ 
+        widgetSettings: {
+          widgetColor: "#667eea",
+          logoColor: "#ffffff",
+          chatWindowColor: "#ffffff",
+          headerColor: "#667eea",
+          headerText: "QueryMate",
+          poweredByText: "Powered by QueryMate"
+        }
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("widgetSettings");
+    res.json({ 
+      widgetSettings: user.widgetSettings || {
+        widgetColor: "#667eea",
+        logoColor: "#ffffff",
+        chatWindowColor: "#ffffff",
+        headerColor: "#667eea",
+        headerText: "QueryMate",
+        poweredByText: "Powered by QueryMate"
+      }
+    });
+  } catch (err) {
+    console.error("Get widget settings error:", err);
+    // Return default settings on error
+    res.json({ 
+      widgetSettings: {
+        widgetColor: "#667eea",
+        logoColor: "#ffffff",
+        chatWindowColor: "#ffffff",
+        headerColor: "#667eea",
+        headerText: "QueryMate",
+        poweredByText: "Powered by QueryMate"
+      }
+    });
+  }
+});
+
+// Get widget settings (authenticated endpoint for frontend)
+app.get("/api/user/widget-settings", authenticateToken, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    // Get user ID - handle both _id and id
+    const userId = req.user._id || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Invalid user" });
+    }
+
+    const user = await User.findById(userId).select("widgetSettings");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ 
+      widgetSettings: user.widgetSettings || {
+        widgetColor: "#667eea",
+        logoColor: "#ffffff",
+        chatWindowColor: "#ffffff",
+        headerColor: "#667eea",
+        headerText: "QueryMate",
+        poweredByText: "Powered by QueryMate"
+      }
+    });
+  } catch (err) {
+    console.error("Get widget settings error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update widget settings
+app.put("/api/user/widget-settings", authenticateToken, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    // Get user ID - handle both _id and id
+    const userId = req.user._id || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Invalid user" });
+    }
+
+    const { widgetSettings } = req.body;
+    if (!widgetSettings) {
+      return res.status(400).json({ error: "Widget settings are required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    // Initialize widgetSettings if it doesn't exist
+    if (!user.widgetSettings) {
+      user.widgetSettings = {};
+    }
+    
+    // Update widget settings, preserving defaults if not provided
+    user.widgetSettings = {
+      widgetColor: widgetSettings.widgetColor || user.widgetSettings?.widgetColor || "#667eea",
+      logoColor: widgetSettings.logoColor || user.widgetSettings?.logoColor || "#ffffff",
+      chatWindowColor: widgetSettings.chatWindowColor || user.widgetSettings?.chatWindowColor || "#ffffff",
+      headerColor: widgetSettings.headerColor || user.widgetSettings?.headerColor || "#667eea",
+      headerText: widgetSettings.headerText || user.widgetSettings?.headerText || "QueryMate",
+      poweredByText: user.widgetSettings?.poweredByText || "Powered by QueryMate" // Not editable
+    };
+    
+    await user.save();
+
+    res.json({ 
+      message: "Widget settings updated successfully",
+      widgetSettings: user.widgetSettings
+    });
+  } catch (err) {
+    console.error("Update widget settings error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get user context data
 app.get("/api/user/context", authenticateToken, async (req, res) => {
   try {
@@ -260,91 +423,8 @@ app.get("/api/context-session", authenticateToken, async (req, res) => {
       });
       await session.save();
       
-      // Get initial greeting from Gemini
-      const geminiApiKey = process.env.GEMINI_API_KEY;
-      if (geminiApiKey) {
-        try {
-          const tempGenAI = new GoogleGenerativeAI(geminiApiKey);
-          const prompt = `You are QueryMate, an intelligent assistant that gathers detailed context information about a business or service.
-
-Your task is to ask smart, natural questions until you have enough information to generate a complete description.
-
-Use what you already know to decide the next question — do not ask irrelevant or repetitive things.
-
-Always collect details such as:
-- What the business or service offers
-- Target users or customers
-- Core features or benefits
-- Pricing or availability details
-- Contact or support information
-- Any additional unique qualities
-
-Once you have enough context, mark the process as complete.
-
-Respond in JSON format only:
-
-{
-  "reply": "<your next conversational question or confirmation>",
-  "collectedData": {
-    "business_name": "...",
-    "description": "...",
-    "target_audience": "...",
-    "features": "...",
-    "pricing": "...",
-    "support": "...",
-    "contact": "...",
-    "...": "add dynamically as discovered"
-  },
-  "done": true or false
-}
-
-Current collected data:
-{}
-
-Latest user message:
-"[Initial greeting - start the conversation]"`;
-
-          const modelsToTry = ["gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-pro"];
-          for (const modelName of modelsToTry) {
-            try {
-              const model = tempGenAI.getGenerativeModel({ model: modelName });
-              const result = await model.generateContent(prompt);
-              const response = await result.response;
-              const text = response.text();
-              
-              let jsonText = text.trim();
-              if (jsonText.startsWith("```")) {
-                jsonText = jsonText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-              }
-              
-              const geminiResponse = JSON.parse(jsonText);
-              if (geminiResponse.collectedData) {
-                session.collectedData = { ...session.collectedData, ...geminiResponse.collectedData };
-              }
-              if (geminiResponse.done === true) {
-                session.stage = "complete";
-              }
-              session.lastUpdated = new Date();
-              await session.save();
-              
-              return res.json({
-                session: {
-                  collectedData: session.collectedData,
-                  stage: session.stage,
-                  lastUpdated: session.lastUpdated
-                },
-                initialMessage: geminiResponse.reply || "Hello! I'm QueryMate. Let's gather some information about your business or service. What does your business do?"
-              });
-            } catch (err) {
-              continue;
-            }
-          }
-        } catch (err) {
-          console.error("Error getting initial greeting:", err);
-        }
-      }
-      
-      // Fallback if Gemini fails
+      // Return immediately with a simple greeting - don't call Gemini API here
+      // This makes the page load instantly. Gemini will be called when user sends first message.
       return res.json({
         session: {
           collectedData: session.collectedData,
@@ -355,14 +435,29 @@ Latest user message:
       });
     }
 
-    // If session exists but is complete, return it
+    // If session exists, return it immediately
     if (session) {
+      // If session is complete, return it
+      if (session.stage === "complete") {
+        return res.json({
+          session: {
+            collectedData: session.collectedData,
+            stage: session.stage,
+            lastUpdated: session.lastUpdated
+          }
+        });
+      }
+      
+      // If session is still collecting, return with a simple message if no messages yet
       return res.json({
         session: {
           collectedData: session.collectedData,
           stage: session.stage,
           lastUpdated: session.lastUpdated
-        }
+        },
+        initialMessage: Object.keys(session.collectedData).length === 0 
+          ? "Hello! I'm QueryMate. Let's gather some information about your business or service. What does your business do?"
+          : "Let's continue gathering information about your business. What would you like to tell me?"
       });
     }
 
@@ -451,18 +546,31 @@ ${JSON.stringify(session.collectedData, null, 2)}
 Latest user message:
 "${message}"`;
 
-    // Call Gemini API
+    // Call Gemini API with timeout
     const tempGenAI = new GoogleGenerativeAI(geminiApiKey);
-    const modelsToTry = ["gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-pro"];
+    // Prioritize faster models first
+    const modelsToTry = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
     let lastError = null;
     let geminiResponse = null;
+
+    // Helper function to add timeout to Gemini calls
+    const callGeminiWithTimeout = async (model, prompt, timeoutMs = 20000) => {
+      return Promise.race([
+        (async () => {
+          const result = await model.generateContent(prompt);
+          const response = await result.response;
+          return response.text();
+        })(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Gemini API timeout")), timeoutMs)
+        )
+      ]);
+    };
 
     for (const modelName of modelsToTry) {
       try {
         const model = tempGenAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        const text = await callGeminiWithTimeout(model, prompt, 20000);
         
         // Try to parse JSON from response
         // Sometimes Gemini wraps JSON in markdown code blocks
@@ -475,7 +583,7 @@ Latest user message:
         break;
       } catch (err) {
         lastError = err;
-        console.log(`Model ${modelName} failed, trying next...`);
+        console.log(`Model ${modelName} failed: ${err.message}, trying next...`);
         continue;
       }
     }
@@ -577,6 +685,25 @@ app.post("/api/context-session/complete", authenticateToken, async (req, res) =>
   }
 });
 
+// Delete/Reset context session
+app.delete("/api/context-session", authenticateToken, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    // Delete the session
+    await ContextSession.findOneAndDelete({ email: req.user.email });
+
+    res.json({ 
+      message: "Context session reset successfully"
+    });
+  } catch (err) {
+    console.error("Delete context session error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Gemini setup
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) console.warn("⚠️ Missing GEMINI_API_KEY in .env");
@@ -599,24 +726,6 @@ try {
   console.warn("⚠️ Failed to load domain data:", e.message);
 }
 
-// Middleware to authenticate by API key
-const authenticateApiKey = async (req, res, next) => {
-  const userApiKey = req.headers["x-api-key"] || req.body.apiKey;
-  
-  if (!userApiKey) {
-    return next(); // Continue without user if no API key
-  }
-
-  try {
-    const user = await User.findOne({ apiKey: userApiKey }).select("-password");
-    if (user) {
-      req.user = user;
-    }
-    next();
-  } catch (err) {
-    next(); // Continue without user if error
-  }
-};
 
 // Public chat endpoint for widget (uses API key)
 app.post("/api/chat/public", authenticateApiKey, async (req, res) => {

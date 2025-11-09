@@ -11,7 +11,7 @@ function ChatWidget() {
     <>
       {/* Chat Popup */}
       {isOpen && (
-        <div className="fixed bottom-20 right-4 z-50 w-[350px] h-[500px] bg-white shadow-2xl rounded-lg flex flex-col border border-gray-200">
+        <div className="fixed bottom-20 right-4 z-50 md:w-[350px] w-[250px] md:h-[500px] h-[300px] bg-white shadow-2xl rounded-lg flex flex-col border border-gray-200">
           {/* Header */}
           <div className="flex items-center justify-between p-4 bg-indigo-600 text-white rounded-t-lg">
             <div className="flex items-center gap-2">
