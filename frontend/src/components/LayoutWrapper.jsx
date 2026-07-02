@@ -1,25 +1,32 @@
 "use client";
+
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import Header from "@/components/Header";
-import Sidebar from "@/components/Sidebar";
+import { Sidebar } from "./Sidebar";
+import { Header } from "./Header";
+import { isAuthenticated } from "@/lib/utils";
+
+const publicRoutes = ["/", "/login", "/signup", "/pricing", "/try-chat", "/try-builder", "/personalize-chatbot"];
 
 export default function LayoutWrapper({ children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const authRoutes = ["/login", "/signup"];
-  const isAuthPage = authRoutes.includes(pathname);
+  const isPublicRoute = publicRoutes.includes(pathname);
 
-  if (isAuthPage) {
-    // Fullscreen auth pages
-    return <div className="min-h-screen">{children}</div>;
+  if (isPublicRoute) {
+    return <>{children}</>;
   }
 
-  // Default layout with Sidebar + Header
+  if (!isAuthenticated() && !isPublicRoute) {
+    return <>{children}</>;
+  }
+
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex flex-col flex-1">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-4">{children}</main>
+    <div className="min-h-screen bg-[rgb(var(--color-background))]">
+      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <div className="lg:pl-64">
+        <Header onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+        <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

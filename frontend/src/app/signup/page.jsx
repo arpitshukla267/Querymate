@@ -1,19 +1,28 @@
 "use client";
-import React, { useState } from "react";
-import { UserPlus } from "lucide-react";
-import Image from "next/image";
-import axios from "axios";
-import { useRouter } from "next/navigation";
 
-function SignupPage() {
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import axios from "axios";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { getBackendUrl, setAuth, isAuthenticated } from "@/lib/utils";
+import { UserPlus, Bot, Sparkles } from "lucide-react";
+
+export default function SignupPage() {
+  const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-  const url = process.env.NEXT_PUBLIC_BACKEND_URL || "https://querymate-backend-sz0d.onrender.com";
+  useEffect(() => {
+    if (isAuthenticated()) {
+      router.push("/dashboard");
+    }
+  }, [router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,12 +41,12 @@ function SignupPage() {
     setLoading(true);
 
     try {
-      const { data } = await axios.post(`${url}/api/register`, { email, password });
-      
+      const url = getBackendUrl();
+      const { data } = await axios.post(`${url}/api/register`, { name, email, password });
+
       if (data.token) {
-        localStorage.setItem("authToken", data.token);
-        localStorage.setItem("userEmail", data.user.email);
-        router.push("/");
+        setAuth(data.token, data.user.email);
+        router.push("/dashboard");
       }
     } catch (err) {
       setError(err.response?.data?.error || "Signup failed. Please try again.");
@@ -47,95 +56,114 @@ function SignupPage() {
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Left side - Image */}
-      <div className="hidden md:flex md:w-1/2 items-center justify-center bg-white p-8">
-        <Image
-          src="https://i.pinimg.com/1200x/e0/aa/ce/e0aace4e8ac951195fbbd1a97b0c1d87.jpg"
-          alt="Chat illustration"
-          width={600}
-          height={600}
-          className="object-cover w-full h-full"
-        />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl grid md:grid-cols-2 gap-8 items-center">
+        {/* Left side - Branding */}
+        <div className="hidden md:flex flex-col items-center justify-center text-center space-y-6 text-white">
+          <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-lg flex items-center justify-center border border-white/30">
+            <Bot className="w-12 h-12" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold mb-2">QueryMate</h1>
+            <p className="text-purple-200 text-lg">
+              Premium AI Chatbot Platform
+            </p>
+          </div>
+          <div className="flex items-center space-x-2 text-purple-200">
+            <Sparkles className="w-5 h-5" />
+            <span>Build powerful AI chatbots in minutes</span>
+          </div>
+        </div>
 
-      {/* Right side - Signup form */}
-      <div className="flex w-full md:w-1/2 items-center justify-center bg-white">
-        <div className="w-full max-w-md p-8">
-          <div className="text-center mb-6">
-            <UserPlus className="w-12 h-12 text-indigo-600 mx-auto" />
-            <h1 className="text-3xl font-bold text-gray-800">Sign up for QueryMate</h1>
-            <p className="text-gray-500 text-sm">Create your account to get started.</p>
+        {/* Right side - Signup form */}
+        <div className="bg-[rgb(var(--color-surface-elevated))] rounded-2xl shadow-2xl p-8 border border-[rgb(var(--color-border))]">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 rounded-xl bg-[rgb(var(--color-primary))] mx-auto mb-4 flex items-center justify-center">
+              <UserPlus className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-3xl font-bold text-[rgb(var(--color-text-primary))] mb-2">
+              Create Account
+            </h2>
+            <p className="text-[rgb(var(--color-text-secondary))]">
+              Sign up to start building AI chatbots
+            </p>
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-gray-700 font-medium mb-1">Email</label>
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-700 font-medium mb-1">Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                required
-                disabled={loading}
-                minLength={6}
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-700 font-medium mb-1">Confirm Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                required
-                disabled={loading}
-                minLength={6}
-              />
-            </div>
-
-            <button
-              type="submit"
+          <form onSubmit={handleSubmit} className="space-y-6">    
+            <Input
+              label="Name"
+              type="name"
+              placeholder="Enter your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
               disabled={loading}
-              className="w-full bg-indigo-600 text-white py-2 rounded-md font-semibold hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+
+            <Input
+              label="Email"
+              type="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+            />
+
+            <Input
+              label="Password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
+              minLength={6}
+            />
+
+            <Input
+              label="Confirm Password"
+              type="password"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              disabled={loading}
+              minLength={6}
+            />
+
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full"
+              size="lg"
+              disabled={loading}
             >
-              {loading ? "Creating account..." : "Sign up"}
-            </button>
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white mr-2"></div>
+                  Creating account...
+                </>
+              ) : (
+                "Sign up"
+              )}
+            </Button>
           </form>
 
-          <p className="text-sm text-gray-600 mt-4 text-center">
+          <p className="text-sm text-[rgb(var(--color-text-secondary))] mt-6 text-center">
             Already have an account?{" "}
-            <a href="/login" className="text-indigo-600 hover:underline font-medium">
+            <Link href="/login" className="text-[rgb(var(--color-primary))] hover:underline font-medium">
               Login
-            </a>
+            </Link>
           </p>
         </div>
       </div>
     </div>
   );
 }
-
-export default SignupPage;
-
