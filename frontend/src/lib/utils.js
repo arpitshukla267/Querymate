@@ -24,7 +24,11 @@ export function truncate(str, length = 50) {
 }
 
 export function getBackendUrl() {
-  return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  return (
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    "http://localhost:5000" ||
+    "https://querymate-backend-sz0d.onrender.com"
+  );
 }
 
 export function getAuthToken() {
