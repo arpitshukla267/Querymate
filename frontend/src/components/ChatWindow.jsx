@@ -2,6 +2,7 @@
 
 import axios from "axios";
 import React, { useState, useRef, useEffect } from "react";
+import { DemoModeModal, isAiServiceError } from "@/components/ui/DemoModeModal";
 
 function ChatWindow() {
   const [messages, setMessages] = useState([
@@ -10,6 +11,7 @@ function ChatWindow() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [inputHeight, setInputHeight] = useState("auto"); // Initial height
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   const textareaRef = useRef(null);
 
@@ -61,6 +63,9 @@ function ChatWindow() {
       }
     } catch (err) {
       console.error(err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       const serverMsg = err?.response?.data?.error || "Error connecting to server.";
       setMessages((prev) => [
         ...prev,
@@ -137,6 +142,12 @@ function ChatWindow() {
           {loading ? "..." : "Send"}
         </button>
       </div>
+
+      {/* Demo Mode Modal */}
+      <DemoModeModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+      />
     </div>
   );
 }

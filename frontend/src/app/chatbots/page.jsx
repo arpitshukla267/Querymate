@@ -23,6 +23,7 @@ import {
   Minimize2,
   Send,
 } from "lucide-react";
+import { DemoModeModal, isAiServiceError } from "@/components/ui/DemoModeModal";
 
 function toast(message, type = "info") {
   const toastDiv = document.createElement("div");
@@ -45,6 +46,7 @@ export default function ChatbotsPage() {
   const [showScriptModal, setShowScriptModal] = useState(false);
   const [selectedChatbot, setSelectedChatbot] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   // Chatbot Preview State
   const [showChatPreview, setShowChatPreview] = useState(false);
@@ -90,6 +92,9 @@ export default function ChatbotsPage() {
         ]);
       }
     } catch (err) {
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       console.error("Preview chat error:", err);
       setPreviewMessages((prev) => [
         ...prev,
@@ -534,6 +539,12 @@ export default function ChatbotsPage() {
           </div>
         </div>
       )}
+
+      {/* Demo Mode Modal */}
+      <DemoModeModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+      />
     </div>
   );
 }

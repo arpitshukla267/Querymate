@@ -17,6 +17,7 @@ import {
   Bot,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { DemoModeModal, isAiServiceError } from "@/components/ui/DemoModeModal";
 
 // Simple toast
 function toast(message, type = "info") {
@@ -41,6 +42,7 @@ export default function TryChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState("");
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -108,6 +110,9 @@ export default function TryChatPage() {
       }
     } catch (err) {
       console.error("Error sending message:", err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       const errorMessage = err.response?.data?.error || err.message || "Sorry, I encountered an error. Please try again.";
       setMessages((prev) => [
         ...prev,
@@ -347,6 +352,12 @@ export default function TryChatPage() {
           </p>
         </div>
       </Modal>
+
+      {/* Demo Mode Modal */}
+      <DemoModeModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+      />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { DemoModeModal, isAiServiceError } from "@/components/ui/DemoModeModal";
 
 // Simple toast
 function toast(message, type = "info") {
@@ -48,6 +49,7 @@ export default function ChatPage() {
   const [editingTitle, setEditingTitle] = useState(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -242,6 +244,9 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error("Error sending message:", err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -549,6 +554,12 @@ export default function ChatPage() {
           </p>
         </div>
       </div>
+
+      {/* Demo Mode Modal */}
+      <DemoModeModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+      />
     </div>
   );
 }

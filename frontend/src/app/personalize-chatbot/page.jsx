@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { DemoModeModal, isAiServiceError } from "@/components/ui/DemoModeModal";
 import { getBackendUrl, getAuthToken, isAuthenticated } from "@/lib/utils";
 import {
   ChevronRight,
@@ -54,6 +55,7 @@ export default function PersonalizeChatbotPage() {
   const [loading, setLoading] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
   const [showScriptModal, setShowScriptModal] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
   const [generatedScript, setGeneratedScript] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -130,6 +132,9 @@ export default function PersonalizeChatbotPage() {
       }
     } catch (err) {
       console.error("Error initializing questions:", err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       toastMessage("Failed to start. Please try again.", "error");
       setConversationMessages([
         {
@@ -262,6 +267,9 @@ CRITICAL: You MUST respond ONLY with valid JSON. No other text before or after.`
       }
     } catch (err) {
       console.error("Error sending answer:", err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       setConversationMessages((prev) => [
         ...prev,
         {
@@ -405,6 +413,9 @@ Respond with ONLY this JSON structure. No markdown, no explanation, no code fenc
       throw new Error("Could not parse AI response");
     } catch (err) {
       console.error("Error during AI extraction, using fallback:", err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       // Fallback: use regex-based extraction
       extractDataFromConversation();
       setIsComplete(true);
@@ -543,6 +554,9 @@ Respond with ONLY this JSON structure. No markdown, no explanation, no code fenc
       }
     } catch (err) {
       console.error("Preview chat error:", err);
+      if (isAiServiceError(err)) {
+        setShowDemoModal(true);
+      }
       setPreviewMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Sorry, I couldn't process that. Please try again." },
@@ -1112,6 +1126,11 @@ Respond with ONLY this JSON structure. No markdown, no explanation, no code fenc
           </div>
         </div>
       )}
+      {/* Demo Mode Modal */}
+      <DemoModeModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+      />
     </div>
   );
 }
