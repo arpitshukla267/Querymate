@@ -4,6 +4,8 @@ import axios from "axios";
 import React, { useState, useRef, useEffect } from "react";
 import { DemoModeModal, isAiServiceError } from "@/components/ui/DemoModeModal";
 
+import { getBackendUrl } from "@/lib/utils";
+
 function ChatWindow() {
   const [messages, setMessages] = useState([
     { role: "bot", text: "Hello! How can I help you today?" },
@@ -15,8 +17,8 @@ function ChatWindow() {
 
   const textareaRef = useRef(null);
 
-  // Backend URL - use deployed URL in production
-  const url = process.env.NEXT_PUBLIC_BACKEND_URL || "https://querymate-backend-sz0d.onrender.com";
+  // Backend URL - resolved dynamically via helper
+  const url = getBackendUrl();
 
   // Get auth token from localStorage
   const getAuthToken = () => {

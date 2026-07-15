@@ -173,9 +173,15 @@ export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "" }) {
 
         {/* Video Section */}
         <div className="px-6 py-4">
-          {!showVideo ? (
+          {/* Watch Demo Trigger Button */}
+          {!showVideo && (
             <button
-              onClick={() => setShowVideo(true)}
+              onClick={() => {
+                setShowVideo(true);
+                if (videoRef.current) {
+                  videoRef.current.play().catch(() => {});
+                }
+              }}
               className="group w-full relative overflow-hidden rounded-xl border border-purple-500/30 bg-purple-950/50 hover:bg-purple-900/50 transition-all duration-300 p-6"
             >
               <div className="flex items-center justify-center space-x-3">
@@ -194,43 +200,60 @@ export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "" }) {
               {/* Shimmer effect */}
               <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
             </button>
-          ) : (
-            <div className="rounded-xl overflow-hidden border border-purple-500/30 bg-black">
-              {demoVideoUrl ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    controls
-                    autoPlay
-                    className="w-full aspect-video"
-                    onLoadedData={() => setVideoLoaded(true)}
-                  >
-                    <source src={demoVideoUrl} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
-                  {!videoLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-                      <div className="flex flex-col items-center space-y-3">
-                        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-purple-300 text-sm">Loading demo...</p>
-                      </div>
+          )}
+
+          {/* Video Container */}
+          <div 
+            className={cn(
+              "rounded-xl overflow-hidden border border-purple-500/30 bg-black relative",
+              !showVideo && "hidden"
+            )}
+          >
+            {demoVideoUrl ? (
+              <>
+                <video
+                  ref={videoRef}
+                  controls
+                  preload="auto"
+                  className="w-full aspect-video"
+                  onLoadedData={() => setVideoLoaded(true)}
+                >
+                  <source src={demoVideoUrl} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+                {!videoLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-purple-300 text-sm">Loading demo...</p>
                     </div>
-                  )}
-                </>
-              ) : (
-                <div className="aspect-video flex items-center justify-center bg-purple-950/50">
-                  <div className="text-center space-y-3 p-6">
-                    <Monitor className="w-12 h-12 text-purple-400/50 mx-auto" />
-                    <p className="text-purple-300/70 text-sm">
-                      Demo video coming soon!
-                    </p>
-                    <p className="text-purple-400/50 text-xs">
-                      Check back later for a full walkthrough.
-                    </p>
                   </div>
+                )}
+              </>
+            ) : (
+              <div className="aspect-video flex items-center justify-center bg-purple-950/50">
+                <div className="text-center space-y-3 p-6">
+                  <Monitor className="w-12 h-12 text-purple-400/50 mx-auto" />
+                  <p className="text-purple-300/70 text-sm">
+                    Demo video coming soon!
+                  </p>
+                  <p className="text-purple-400/50 text-xs">
+                    Check back later for a full walkthrough.
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hidden/Preloaded Video (starts fetching immediately when modal opens, before button click) */}
+          {demoVideoUrl && !showVideo && (
+            <video
+              ref={videoRef}
+              preload="auto"
+              className="hidden"
+            >
+              <source src={demoVideoUrl} type="video/mp4" />
+            </video>
           )}
         </div>
 
