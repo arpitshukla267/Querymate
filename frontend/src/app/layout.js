@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "QueryMate - Premium AI Chatbot Platform",
   description: "Build, customize, and deploy AI chatbots for your business",
+  icons: {
+    icon: "/favicon.jpeg",
+  },
 };
 
 export default function RootLayout({ children }) {

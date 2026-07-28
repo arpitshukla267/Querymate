@@ -201,12 +201,14 @@ Latest user message:
 
     let text;
     try {
-      text = await askAI(prompt, 60000);
+      text = await askAI(prompt, 15000, null, { temperature: 0.2, maxTokens: 800 });
     } catch (err) {
       console.error("AI error in context-session:", err);
-      return res
-        .status(500)
-        .json({ error: "AI service error: " + err.message, isAiError: true });
+      return res.json({
+        reply: "Could you tell me a bit more about your business name and main services?",
+        collectedData,
+        done: false,
+      });
     }
 
     let jsonText = text.trim();

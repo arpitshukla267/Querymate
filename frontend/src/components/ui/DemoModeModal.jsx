@@ -55,7 +55,7 @@ export function isAiServiceError(error) {
  * DemoModeModal - Shows when LLM API is unavailable.
  * Explains the project context and offers a demo video.
  */
-export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "" }) {
+export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "/demo.mp4" }) {
   const [showVideo, setShowVideo] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const videoRef = useRef(null);

@@ -113,19 +113,23 @@ router.post("/", authenticateToken, requireAuth, async (req, res) => {
   ${contextData}
   `;
   
-  const embedding = await generateEmbedding(knowledge);
-  
-  await pool.query(
-    `
-    INSERT INTO documents (
-      chatbot_id,
-      content,
-      embedding
-    )
-    VALUES ($1,$2,$3)
-    `,
-    [chatbot.id, knowledge, JSON.stringify(embedding)],
-  );
+  try {
+    const embedding = await generateEmbedding(knowledge);
+    
+    await pool.query(
+      `
+      INSERT INTO documents (
+        chatbot_id,
+        content,
+        embedding
+      )
+      VALUES ($1,$2,$3)
+      `,
+      [chatbot.id, knowledge, JSON.stringify(embedding)],
+    );
+  } catch (embedErr) {
+    console.warn("Embedding generation skipped or failed:", embedErr.message);
+  }
   
   res.json({
     chatbot: formatChatbot(chatbot),

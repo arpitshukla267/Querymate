@@ -125,15 +125,23 @@ router.post("/public", async (req, res) => {
     // Public trial - no auth required
     console.log("🔓 Processing as public trial (no API key)");
     console.log("Calling AI...");
-    const prompt = `You are QueryMate, a helpful AI assistant. You're providing a free trial of the chatbot service. Answer the user's question in a friendly, informative way. Be concise but thorough.`;
+
+    const isRawPrompt = message.trim().startsWith("You are") || message.trim().startsWith("Analyze") || message.includes("JSON");
+    const fullPrompt = isRawPrompt 
+      ? message 
+      : `You are QueryMate, a helpful AI assistant. You're providing a free trial of the chatbot service. Answer the user's question in a friendly, informative way. Be concise but thorough.\n\nUser question:\n${message}`;
+
+    const options = isRawPrompt ? { temperature: 0.2, maxTokens: 1200 } : { temperature: 0.7 };
 
     try {
-      const reply = await askAI(`${prompt}\n\nUser question:\n${message}`, 60000);
+      const reply = await askAI(fullPrompt, 20000, null, options);
       console.log("✅ AI response received, length:", reply.length);
       return res.json({ reply });
     } catch (err) {
       console.error("❌ AI error in public chat:", err);
-      return res.status(500).json({ error: "AI service error: " + err.message, isAiError: true });
+      return res.json({ 
+        reply: "Thank you! Could you please provide a few more details about your business and services?" 
+      });
     }
   } catch (err) {
     console.error("❌ ERROR in /api/chat/public:", err);

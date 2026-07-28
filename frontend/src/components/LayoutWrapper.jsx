@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
@@ -10,14 +10,25 @@ const publicRoutes = ["/", "/login", "/signup", "/pricing", "/try-chat", "/try-b
 
 export default function LayoutWrapper({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  if (isPublicRoute) {
-    return <>{children}</>;
+  // Prevent SSR vs Client hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[rgb(var(--color-background))]">
+        {children}
+      </div>
+    );
   }
 
-  if (!isAuthenticated() && !isPublicRoute) {
+  if (isPublicRoute || !isAuthenticated()) {
     return <>{children}</>;
   }
 

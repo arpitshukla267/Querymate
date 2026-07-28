@@ -164,46 +164,28 @@ export default function PersonalizeChatbotPage() {
     try {
       const url = getBackendUrl();
 
-      // Build conversation history for context
+      // Build concise conversation history for context (last 6 messages)
       const conversationHistory = conversationMessages
+        .slice(-6)
         .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
         .join("\n");
 
-      const prompt = `You are QueryMate, an intelligent assistant helping to gather information to create a personalized chatbot. 
+      const prompt = `You are QueryMate, a fast AI assistant gathering business context for a chatbot.
 
-Your task is to ask smart, natural questions (one at a time) to gather:
-- Business name
-- What the business does (description)
-- Services/products offered
-- Target audience/customers
-- Key features or benefits
-- Pricing information
-- Common questions customers ask
-- Contact information (website, email, phone, etc.)
+Ask ONE concise, natural question at a time about: business name, what they do, services offered, or pricing.
 
-IMPORTANT: Ask ONE question at a time in a friendly, conversational way. Make it feel natural, not like a form.
-
-Based on the conversation so far:
+Conversation so far:
 ${conversationHistory}
 
-Latest user response: "${userMessage}"
+Latest user answer: "${userMessage}"
 
-Analyze what information you've gathered and what's still missing. Ask your next question to gather more information. 
+If you have collected at least business name, description, and services, return:
+{"done": true, "summary": "brief summary", "nextQuestion": null}
 
-If you have gathered enough information to create a comprehensive chatbot (at least: business name, description, and what they offer), respond with a JSON object:
-{
-  "done": true,
-  "summary": "Brief summary of what you've learned about their business",
-  "nextQuestion": null
-}
+Otherwise return:
+{"done": false, "nextQuestion": "Your next short friendly question"}
 
-Otherwise, if you need more information, respond with:
-{
-  "done": false,
-  "nextQuestion": "Your next friendly, conversational question to gather missing information"
-}
-
-CRITICAL: You MUST respond ONLY with valid JSON. No other text before or after.`;
+Respond strictly with valid JSON.`;
 
       const response = await axios.post(`${url}/api/chat/public`, {
         message: prompt,
@@ -658,7 +640,22 @@ Respond with ONLY this JSON structure. No markdown, no explanation, no code fenc
 
       {/* Step 2: AI Questions */}
       {currentStep === 2 && (
-        <Card>
+        <Card className="relative overflow-hidden">
+          {/* Analyzing Overlay covering full Chat Window Card */}
+          {isAnalyzing && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[rgb(var(--color-surface))]/95 backdrop-blur-md p-8">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full border-4 border-[rgb(var(--color-primary))]/20 border-t-[rgb(var(--color-primary))] animate-spin" />
+                  <Sparkles className="w-6 h-6 text-[rgb(var(--color-primary))] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                </div>
+                <p className="text-base font-medium text-[rgb(var(--color-text-primary))] text-center max-w-sm">
+                  Analyzing your answers and building your custom chatbot profile...
+                </p>
+              </div>
+            </div>
+          )}
+
           <CardHeader>
             <CardTitle>Answer Questions</CardTitle>
             <CardDescription>
@@ -667,7 +664,7 @@ Respond with ONLY this JSON structure. No markdown, no explanation, no code fenc
           </CardHeader>
           <CardContent>
             {/* Chat Interface */}
-            <div className="relative space-y-4">
+            <div className="space-y-4">
               <div className="h-96 overflow-y-auto p-4 bg-[rgb(var(--color-surface))] rounded-lg border border-[rgb(var(--color-border))] space-y-4">
                 {conversationMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
@@ -705,21 +702,6 @@ Respond with ONLY this JSON structure. No markdown, no explanation, no code fenc
 
                 <div ref={messagesEndRef} />
               </div>
-
-              {/* Analyzing Overlay */}
-              {isAnalyzing && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[rgb(var(--color-surface))]/80 backdrop-blur-sm rounded-lg">
-                  <div className="flex flex-col items-center space-y-4 p-8">
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-full border-4 border-[rgb(var(--color-primary))]/20 border-t-[rgb(var(--color-primary))] animate-spin" />
-                      <Sparkles className="w-6 h-6 text-[rgb(var(--color-primary))] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                    </div>
-                    <p className="text-sm font-medium text-[rgb(var(--color-text-primary))] text-center">
-                      Analyzing your answers and building your custom chatbot profile...
-                    </p>
-                  </div>
-                </div>
-              )}
 
               {/* Input */}
               <div className="flex space-x-2">

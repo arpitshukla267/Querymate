@@ -59,6 +59,7 @@ export function Sidebar({ isOpen, onToggle }) {
           "flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
+        surpasshydrationwarning="true"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[rgb(var(--color-border))]">

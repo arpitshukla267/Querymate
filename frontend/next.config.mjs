@@ -1,8 +1,17 @@
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ["i.pinimg.com"], // 👈 whitelist your image domain here
+    domains: ["i.pinimg.com"],
+  },
+  turbopack: {
+    root: __dirname,
   },
 };
 
-export default nextConfig;  // ✅ ESM syntax instead of module.exports
+export default nextConfig;
