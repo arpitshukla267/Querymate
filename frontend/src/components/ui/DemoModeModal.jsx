@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X, AlertTriangle, Monitor } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 
 /**
