@@ -19,6 +19,7 @@ import chatbotRoutes from "./routes/chatbots.js";
 import conversationRoutes from "./routes/conversations.js";
 import userRoutes from "./routes/user.js";
 import contextSessionRoutes from "./routes/contextSession.js";
+import { prewarmOllama } from "./services/aiService.js";
 
 // Import middleware
 import { authenticateApiKey } from "./middleware/auth.js";
@@ -159,4 +160,5 @@ app.listen(PORT, () => {
   console.log(`✅ Backend running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`🔗 API URL: http://localhost:${PORT}`);
+  prewarmOllama();
 });

@@ -76,7 +76,7 @@ User question:
 ${message}`;
 
           try {
-            const reply = await askAI(prompt, 60000);
+            const reply = await askAI(prompt, 8000);
             return res.json({ reply });
           } catch (err) {
             console.error("AI error in /api/chat/public:", err);
@@ -96,7 +96,7 @@ ${message}`;
         console.log("✅ Found user with context data");
         const prompt = `You are QueryMate, a helpful assistant. Use ONLY the following context to answer. If the answer isn't in the context, say "Hmm, that doesn't seem related to what I can help with."\n\nContext:\n${user.context_data}\n\nUser question:\n${message}`;
         try {
-          const reply = await askAI(prompt, 60000);
+          const reply = await askAI(prompt, 8000);
           return res.json({ reply });
         } catch (err) {
           console.error("AI error in /api/chat/public:", err);
@@ -117,7 +117,7 @@ ${message}`;
     const options = isRawPrompt ? { temperature: 0.2, maxTokens: 1200 } : { temperature: 0.7 };
 
     try {
-      const reply = await askAI(fullPrompt, 20000, null, options);
+      const reply = await askAI(fullPrompt, 6000, null, options);
       console.log("✅ AI response received, length:", reply.length);
       return res.json({ reply });
     } catch (err) {

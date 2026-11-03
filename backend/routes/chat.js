@@ -1,6 +1,6 @@
 import express from "express";
 import { authenticateToken, authenticateApiKey, requireAuth } from "../middleware/auth.js";
-import { askAI, streamDeepseek, AiServiceError } from "../services/aiService.js";
+import { askAI, streamAI, AiServiceError } from "../services/aiService.js";
 import pool from "../config/db.js";
 import { retrieveContext } from "../services/ragService.js";
 
@@ -94,7 +94,7 @@ router.post("/public", async (req, res) => {
             say that you do not have enough information.
             `;
             
-            const reply = await askAI(prompt, 60000);
+            const reply = await askAI(prompt, 8000);
             return res.json({ reply });
           } catch (err) {
             console.error("AI error in /api/chat/public:", err);
@@ -113,7 +113,7 @@ router.post("/public", async (req, res) => {
       if (user && user.context_data) {
         const prompt = `You are QueryMate, a helpful assistant. Use ONLY the following context to answer. If the answer isn't in the context, say "Hmm, that doesn't seem related to what I can help with."\n\nContext:\n${user.context_data}\n\nUser question:\n${message}`;
         try {
-          const reply = await askAI(prompt, 60000);
+          const reply = await askAI(prompt, 8000);
           return res.json({ reply });
         } catch (err) {
           console.error("AI error in /api/chat/public:", err);
@@ -188,7 +188,7 @@ router.post("/", authenticateToken, requireAuth, async (req, res) => {
     try {
       const reply = await askAI(
         `You are QueryMate, a helpful AI assistant. Answer the user's question in a friendly, informative way. Be concise but thorough.`,
-        60000,
+        8000,
         conversationMessages
       );
 
@@ -260,7 +260,7 @@ router.post("/stream", authenticateToken, requireAuth, async (req, res) => {
 
       conversationMessages.push({ role: "user", content: message });
 
-      await streamDeepseek(
+      await streamAI(
         `You are QueryMate, a helpful AI assistant. Answer the user's question in a friendly, informative way.`,
         (chunk, done) => {
           if (done) {

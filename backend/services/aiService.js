@@ -8,12 +8,48 @@ const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 
+// Circuit Breaker for failing/unpaid API providers (prevents wasting 1-2s on every request)
+const disabledProviders = new Map(); // providerName -> timestamp
+
+export function isProviderDisabled(name) {
+  const until = disabledProviders.get(name);
+  if (!until) return false;
+  if (Date.now() > until) {
+    disabledProviders.delete(name);
+    return false;
+  }
+  return true;
+}
+
+export function disableProvider(name, minutes = 10) {
+  disabledProviders.set(name, Date.now() + minutes * 60 * 1000);
+}
+
+/**
+ * Pre-warm Ollama model in RAM so the first user prompt doesn't suffer a 12s cold start.
+ * Fire-and-forget: doesn't block server startup.
+ */
+export function prewarmOllama() {
+  console.log("🔥 Pre-warming Ollama model...");
+  fetch(`${OLLAMA_URL}/api/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: process.env.OLLAMA_MODEL || "llama3",
+      keep_alive: "60m",
+    }),
+  })
+    .then(() => console.log("✅ Ollama model pre-warmed and pinned in RAM"))
+    .catch(() => console.warn("⚠️ Ollama prewarm skipped (not running?)"));
+}
+
 /**
  * Ask Groq API (Ultra-fast cloud inference, ~300ms)
  */
-export async function askGroq(prompt, timeoutMs = 10000, messages = null, options = {}) {
+export async function askGroq(prompt, timeoutMs = 8000, messages = null, options = {}) {
   const apiKey = getApiKey("GROQ_API_KEY");
   if (!apiKey) throw new Error("Missing GROQ_API_KEY");
+  if (isProviderDisabled("groq")) throw new Error("Groq temporarily disabled");
 
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -37,6 +73,9 @@ export async function askGroq(prompt, timeoutMs = 10000, messages = null, option
 
     clearTimeout(id);
     if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 402 || resp.status === 429) {
+        disableProvider("groq", 10);
+      }
       const text = await resp.text().catch(() => "");
       throw new Error(`Groq error: ${resp.status} ${resp.statusText} ${text}`);
     }
@@ -54,9 +93,10 @@ export async function askGroq(prompt, timeoutMs = 10000, messages = null, option
 /**
  * Ask OpenRouter API (Fast free cloud models)
  */
-export async function askOpenRouter(prompt, timeoutMs = 12000, messages = null, options = {}) {
+export async function askOpenRouter(prompt, timeoutMs = 8000, messages = null, options = {}) {
   const apiKey = getApiKey("OPENROUTER_API_KEY");
   if (!apiKey) throw new Error("Missing OPENROUTER_API_KEY");
+  if (isProviderDisabled("openrouter")) throw new Error("OpenRouter temporarily disabled");
 
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -80,6 +120,9 @@ export async function askOpenRouter(prompt, timeoutMs = 12000, messages = null, 
 
     clearTimeout(id);
     if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 402 || resp.status === 429) {
+        disableProvider("openrouter", 10);
+      }
       const text = await resp.text().catch(() => "");
       throw new Error(`OpenRouter error: ${resp.status} ${resp.statusText} ${text}`);
     }
@@ -97,9 +140,10 @@ export async function askOpenRouter(prompt, timeoutMs = 12000, messages = null, 
 /**
  * Ask DeepSeek AI
  */
-export async function askDeepseek(prompt, timeoutMs = 15000, messages = null, options = {}) {
+export async function askDeepseek(prompt, timeoutMs = 5000, messages = null, options = {}) {
   const DEEPSEEK_API_KEY = getApiKey("DEEPSEEK_API_KEY");
   if (!DEEPSEEK_API_KEY) throw new Error("Missing DEEPSEEK_API_KEY");
+  if (isProviderDisabled("deepseek")) throw new Error("DeepSeek temporarily disabled (402/insufficient balance)");
 
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -126,6 +170,9 @@ export async function askDeepseek(prompt, timeoutMs = 15000, messages = null, op
 
     clearTimeout(id);
     if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 402) {
+        disableProvider("deepseek", 10);
+      }
       const text = await resp.text().catch(() => "");
       throw new Error(`DeepSeek error: ${resp.status} ${resp.statusText} ${text}`);
     }
@@ -141,9 +188,9 @@ export async function askDeepseek(prompt, timeoutMs = 15000, messages = null, op
 }
 
 /**
- * Ask Ollama (local LLM - llama3) with fast token limits
+ * Ask Ollama (local LLM) with fast token limits and keep_alive
  */
-export async function askOllama(prompt, timeoutMs = 15000, messages = null, options = {}) {
+export async function askOllama(prompt, timeoutMs = 6000, messages = null, options = {}) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -155,10 +202,11 @@ export async function askOllama(prompt, timeoutMs = 15000, messages = null, opti
       body: JSON.stringify({
         model: process.env.OLLAMA_MODEL || "llama3",
         messages: messageArray,
+        keep_alive: "60m",
         options: {
-          num_predict: options.maxTokens || 256,
+          num_predict: options.maxTokens || 100, // fast token generation on CPU
           num_ctx: 1024,
-          temperature: options.temperature !== undefined ? options.temperature : 0.2,
+          temperature: options.temperature !== undefined ? options.temperature : 0.3,
         },
         stream: false,
       }),
@@ -182,11 +230,66 @@ export async function askOllama(prompt, timeoutMs = 15000, messages = null, opti
 }
 
 /**
+ * Stream Ollama response via callback
+ */
+export async function streamOllama(prompt, onChunk, messages = null) {
+  const messageArray = messages || [{ role: "user", content: prompt }];
+  const resp = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: process.env.OLLAMA_MODEL || "llama3",
+      messages: messageArray,
+      keep_alive: "60m",
+      options: {
+        num_predict: 120,
+        num_ctx: 1024,
+        temperature: 0.7,
+      },
+      stream: true,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Ollama stream error: ${resp.status}`);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          const json = JSON.parse(line);
+          const chunk = json.message?.content;
+          if (chunk) onChunk(chunk, false);
+          if (json.done) {
+            onChunk(null, true);
+            return;
+          }
+        } catch (e) {}
+      }
+    }
+  }
+  onChunk(null, true);
+}
+
+/**
  * Stream response from DeepSeek AI
  */
 export async function streamDeepseek(prompt, onChunk, messages = null) {
   const DEEPSEEK_API_KEY = getApiKey("DEEPSEEK_API_KEY");
   if (!DEEPSEEK_API_KEY) throw new Error("Missing DEEPSEEK_API_KEY");
+  if (isProviderDisabled("deepseek")) throw new Error("DeepSeek temporarily disabled");
 
   try {
     const messageArray = messages || [{ role: "user", content: prompt }];
@@ -205,6 +308,9 @@ export async function streamDeepseek(prompt, onChunk, messages = null) {
     });
 
     if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 402) {
+        disableProvider("deepseek", 10);
+      }
       const text = await resp.text().catch(() => "");
       throw new Error(`DeepSeek error: ${resp.status} ${resp.statusText} ${text}`);
     }
@@ -244,6 +350,38 @@ export async function streamDeepseek(prompt, onChunk, messages = null) {
 }
 
 /**
+ * Universal Streaming router: DeepSeek -> Ollama -> Simulated Fast Fallback Stream
+ */
+export async function streamAI(prompt, onChunk, messages = null) {
+  // 1. Try DeepSeek streaming
+  if (getApiKey("DEEPSEEK_API_KEY") && !isProviderDisabled("deepseek")) {
+    try {
+      await streamDeepseek(prompt, onChunk, messages);
+      return;
+    } catch (err) {
+      console.warn("Stream DeepSeek unavailable, falling back to Ollama:", err.message);
+    }
+  }
+
+  // 2. Try Ollama streaming
+  try {
+    await streamOllama(prompt, onChunk, messages);
+    return;
+  } catch (err) {
+    console.warn("Stream Ollama unavailable, streaming fast fallback:", err.message);
+  }
+
+  // 3. Fallback smooth word-by-word streaming
+  const fallbackText = generateFastFallback(prompt, messages);
+  const words = fallbackText.split(" ");
+  for (let i = 0; i < words.length; i++) {
+    onChunk(words[i] + (i === words.length - 1 ? "" : " "), false);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  onChunk(null, true);
+}
+
+/**
  * Custom error class for AI service failures
  */
 export class AiServiceError extends Error {
@@ -258,7 +396,7 @@ export class AiServiceError extends Error {
 /**
  * Smart Fallback Generator for Q&A and Analysis when AI models are unavailable or timing out
  */
-function generateFastFallback(prompt, messages) {
+export function generateFastFallback(prompt, messages) {
   const fullContent = (prompt + " " + (messages ? JSON.stringify(messages) : "")).toLowerCase();
   
   // If request is asking for extraction JSON
@@ -312,46 +450,47 @@ function generateFastFallback(prompt, messages) {
 
 /**
  * Primary AI router: tries Groq -> OpenRouter -> DeepSeek -> Ollama -> Fast Fallback
+ * Optimized for low latency (<1-2s typical response)
  */
-export async function askAI(prompt, timeoutMs = 15000, messages = null, options = {}) {
+export async function askAI(prompt, timeoutMs = 6000, messages = null, options = {}) {
   const errors = [];
 
   // 1. Try Groq if key exists
-  if (getApiKey("GROQ_API_KEY")) {
+  if (getApiKey("GROQ_API_KEY") && !isProviderDisabled("groq")) {
     try {
-      return await askGroq(prompt, Math.min(timeoutMs, 8000), messages, options);
+      return await askGroq(prompt, Math.min(timeoutMs, 4000), messages, options);
     } catch (err) {
       errors.push(`Groq: ${err.message}`);
     }
   }
 
   // 2. Try OpenRouter if key exists
-  if (getApiKey("OPENROUTER_API_KEY")) {
+  if (getApiKey("OPENROUTER_API_KEY") && !isProviderDisabled("openrouter")) {
     try {
-      return await askOpenRouter(prompt, Math.min(timeoutMs, 10000), messages, options);
+      return await askOpenRouter(prompt, Math.min(timeoutMs, 5000), messages, options);
     } catch (err) {
       errors.push(`OpenRouter: ${err.message}`);
     }
   }
 
-  // 3. Try DeepSeek if key exists
-  if (getApiKey("DEEPSEEK_API_KEY")) {
+  // 3. Try DeepSeek if key exists and not disabled
+  if (getApiKey("DEEPSEEK_API_KEY") && !isProviderDisabled("deepseek")) {
     try {
-      return await askDeepseek(prompt, Math.min(timeoutMs, 12000), messages, options);
+      return await askDeepseek(prompt, Math.min(timeoutMs, 4000), messages, options);
     } catch (err) {
       errors.push(`DeepSeek: ${err.message}`);
     }
   }
 
-  // 4. Try Ollama local
+  // 4. Try Ollama local (fast timeout to keep UI snappy)
   try {
-    const reply = await askOllama(prompt, Math.min(timeoutMs, 12000), messages, options);
+    const reply = await askOllama(prompt, Math.min(timeoutMs, 5000), messages, options);
     if (reply && reply.trim()) return reply;
   } catch (err) {
     errors.push(`Ollama: ${err.message}`);
   }
 
-  // 5. If all fail, return fast fallback instead of throwing error/blocking user flow
-  console.warn("⚠️ All AI providers failed or unconfigured, using fast fallback. Errors:", errors.join(" | "));
+  // 5. If all fail, return fast fallback instantly (<1ms) instead of erroring or hanging
+  console.warn("⚠️ All AI providers slow/unavailable, using fast fallback. Details:", errors.join(" | "));
   return generateFastFallback(prompt, messages);
 }

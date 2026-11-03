@@ -201,7 +201,7 @@ Latest user message:
 
     let text;
     try {
-      text = await askAI(prompt, 15000, null, { temperature: 0.2, maxTokens: 800 });
+      text = await askAI(prompt, 6000, null, { temperature: 0.2, maxTokens: 800 });
     } catch (err) {
       console.error("AI error in context-session:", err);
       return res.json({

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Play, AlertTriangle, Monitor, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { X, AlertTriangle, Monitor } from "lucide-react";
 import { Button } from "./Button";
 
 /**
@@ -56,17 +55,8 @@ export function isAiServiceError(error) {
  * Explains the project context and offers a demo video.
  */
 export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "/demo.mp4" }) {
-  const [showVideo, setShowVideo] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const videoRef = useRef(null);
-
-  // Reset video state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setShowVideo(false);
-      setVideoLoaded(false);
-    }
-  }, [isOpen]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -173,50 +163,21 @@ export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "/demo.mp4" }) {
 
         {/* Video Section */}
         <div className="px-6 py-4">
-          {/* Watch Demo Trigger Button */}
-          {!showVideo && (
-            <button
-              onClick={() => {
-                setShowVideo(true);
-                if (videoRef.current) {
-                  videoRef.current.play().catch(() => {});
-                }
-              }}
-              className="group w-full relative overflow-hidden rounded-xl border border-purple-500/30 bg-purple-950/50 hover:bg-purple-900/50 transition-all duration-300 p-6"
-            >
-              <div className="flex items-center justify-center space-x-3">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-500/40 group-hover:shadow-purple-500/60 group-hover:scale-110 transition-all duration-300">
-                  <Play className="w-5 h-5 text-white ml-0.5" />
-                </div>
-                <div className="text-left">
-                  <p className="text-white font-semibold text-sm">
-                    ▶ Watch Demo
-                  </p>
-                  <p className="text-purple-300/70 text-xs">
-                    See the AI features in action
-                  </p>
-                </div>
-              </div>
-              {/* Shimmer effect */}
-              <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-            </button>
-          )}
-
           {/* Video Container */}
-          <div 
-            className={cn(
-              "rounded-xl overflow-hidden border border-purple-500/30 bg-black relative",
-              !showVideo && "hidden"
-            )}
-          >
+          <div className="rounded-xl overflow-hidden border border-purple-500/30 bg-black relative">
             {demoVideoUrl ? (
               <>
                 <video
                   ref={videoRef}
                   controls
+                  autoPlay
+                  muted
+                  playsInline
                   preload="auto"
                   className="w-full aspect-video"
+                  onCanPlay={() => setVideoLoaded(true)}
                   onLoadedData={() => setVideoLoaded(true)}
+                  onLoadedMetadata={() => setVideoLoaded(true)}
                 >
                   <source src={demoVideoUrl} type="video/mp4" />
                   Your browser does not support the video tag.
@@ -244,17 +205,6 @@ export function DemoModeModal({ isOpen, onClose, demoVideoUrl = "/demo.mp4" }) {
               </div>
             )}
           </div>
-
-          {/* Hidden/Preloaded Video (starts fetching immediately when modal opens, before button click) */}
-          {demoVideoUrl && !showVideo && (
-            <video
-              ref={videoRef}
-              preload="auto"
-              className="hidden"
-            >
-              <source src={demoVideoUrl} type="video/mp4" />
-            </video>
-          )}
         </div>
 
         {/* Footer */}

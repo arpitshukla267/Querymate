@@ -219,7 +219,7 @@ export default function ChatPage() {
                 if (json.content) {
                   setStreamingMessage((prev) => prev + json.content);
                 } else if (json.error) {
-                  throw new Error(json.error);
+                  console.error("Stream payload error:", json.error);
                 }
               } catch (e) {
                 // Skip invalid JSON
